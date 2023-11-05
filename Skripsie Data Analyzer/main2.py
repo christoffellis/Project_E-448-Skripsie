@@ -23,7 +23,8 @@ def ShowPath(file_path):
     # Extract individual data points
     ShowData(samples)
 
-def ShowData(samples):
+def ShowData(data):
+    samples = data.get("data", [])
     start_time = samples[0]["time"]
 
     times = [sample["time"] - start_time for sample in samples]
@@ -51,9 +52,16 @@ def ShowData(samples):
     # draw a y line at CalculateStopDistanceWithReleaseOfAccelerator
     # draw a y line at CalculateStopDistanceWithFirstFullBrake
 
-    full_brake_plus_reaction_time = calculations.CalculateStopDistanceWithFullBrakePlusReactionTime(data) - start_time
-    release_of_accelerator = calculations.CalculateStopDistanceWithReleaseOfAccelerator(data) - start_time
-    first_full_brake = calculations.CalculateStopDistanceWithFirstFullBrake(data) - start_time
+    full_brake_plus_reaction_time = calculations.CalculateStopDistanceWithFullBrakePlusReactionTime(data)
+    release_of_accelerator = calculations.CalculateStopDistanceWithReleaseOfAccelerator(data)
+    first_full_brake = calculations.CalculateStopDistanceWithFirstFullBrake(data)
+
+    if full_brake_plus_reaction_time == None or release_of_accelerator == None or first_full_brake == None:
+        return
+
+    full_brake_plus_reaction_time -= start_time
+    release_of_accelerator -= start_time
+    first_full_brake -= start_time
 
     # label the lines
 
@@ -61,9 +69,9 @@ def ShowData(samples):
     plt.axvline(x=release_of_accelerator, color='g', linestyle=':', label='Release of Accelerator')
     plt.axvline(x=first_full_brake, color='b', linestyle='--', label='First Brake to Stop')
 
-    print(full_brake_plus_reaction_time)
-    print(release_of_accelerator)
-    print(first_full_brake)
+    #print(full_brake_plus_reaction_time)
+    #print(release_of_accelerator)
+    #print(first_full_brake)
 
     plt.legend()
 

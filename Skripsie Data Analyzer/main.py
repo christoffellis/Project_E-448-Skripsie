@@ -9,6 +9,7 @@ from enums import *
 from mapData import *
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+from main2 import ShowData
 
 
 def GetListOfDirs():
@@ -79,6 +80,8 @@ def GetStopDistances(roadType=RoadType.Straight, kpi=KPI.LightIntensity, method=
 dataLevels = {}
 
 usedLabelList = []
+
+
 def PlotPoint(data, kpi=KPI.LightIntensity, method=CheckType.Under110):
     if method == CheckType.Under110:
         distance, speed = CalculateStopDistanceWithLessThan110(data)
@@ -133,8 +136,6 @@ def PlotPoint(data, kpi=KPI.LightIntensity, method=CheckType.Under110):
         color = "orchid"
         label = "Mixed"
 
-
-
     # plot the point
     # assign the point to the appropriate group
     if kpi != KPI.TestNumber and kpi != KPI.VehicleSpeed:
@@ -161,8 +162,7 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
     files = GetListOfFiles()
     # print(files)
 
-
-
+    reactionTimes = [[] for _ in range(5)]
     values = [{} for _ in range(5)]
     for file in files:
         # open the file and read its JSON data
@@ -171,10 +171,10 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
             if len(data["mapName"].split(" - ")) <= 1:
                 continue
 
-            if IdentifyOutliers(data):
-                #ShowPath(file)
-                print("Outlier found in " + file)
-                continue
+            # if IdentifyOutliers(data):
+            #     #ShowPath(file)
+            #     print("Outlier found in " + file)
+            #     continue
 
             mapVal = int(data["mapName"].split(" - ")[1].replace("[", "").replace("]", ""))
             index = (mapVal - 1) / 5
@@ -186,10 +186,15 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
             # print(str(mapVal) + "for " + data["mapName"])
 
             if mapVal == roadType or roadType == RoadType.All.value:
-                #print("Checking " + data["mapName"] + " and has index of " + str(index) + "...")
+                # print("Checking " + data["mapName"] + " and has index of " + str(index) + "...")
 
                 values[index] = AddSpeedPerDistance(values[index], data)
-                # print(file)
+                time, _ = CalculateReactionTimeWithReactionAccelToBrake(data)
+                if time != None:
+
+                    reactionTimes[index].append(time)
+                    # if distance > 200:
+                    #ShowData(data)
 
     # set the plot min x to 0
     # plt.xlim(0)
@@ -207,13 +212,11 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
     for i in range(0, len(values)):
         values[i] = dict(sorted(values[i].items()))
 
-
-
     # set the plot to have two subplots, one next to the other.
     # the first subplot needs to have a width of 10, and the second needs to have a width of 3
     figs, axs = plt.subplots(1, 2, figsize=(13, 3), gridspec_kw={'width_ratios': [6, 4]})
 
-    plt.subplots_adjust(bottom=0.2, right= 0.875)
+    plt.subplots_adjust(bottom=0.2, right=0.875)
 
     crossPoints = []
 
@@ -227,8 +230,11 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
             speedList.append(np.mean(myDict[key]))
             downStdSpeedList.append(np.mean(myDict[key]) - np.std(myDict[key]))
             distanceList.append(key)
+        #print("Before mean: " + str(reactionTimes[values.index(myDict)]))
 
-        convolveSize = 30
+        reactionTimes[values.index(myDict)] = np.mean(reactionTimes[values.index(myDict)])
+
+        convolveSize = 10
         if len(speedList) > 0 and len(upStdSpeedList) > 0 and len(downStdSpeedList) > 0:
             # smooth the data with a cast of 5
             speedList = np.convolve(speedList, np.ones(convolveSize), 'same') / convolveSize
@@ -253,24 +259,44 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
                 label = "Mixed"
                 color = "orchid"
 
-
-
             axs[0].plot(distanceList, speedList, color=color, label=label)
             axs[1].plot(distanceList, speedList, color=color, label=label)
             axs[0].fill_between(distanceList, upStdSpeedList, downStdSpeedList, color=color, alpha=0.2)
             axs[1].fill_between(distanceList, upStdSpeedList, downStdSpeedList, color=color, alpha=0.2)
 
             targetAngle = [10, 10, 20, 10, 20][roadType - 1]
-            targetDistance = [400, 210, 140, 210, 210][roadType - 1]
+            targetDistance = [400, 210, 140, 150, 210][roadType - 1]
 
-            #print("Len of speedlist is " + str(len(speedList)) + " and len of distancelist is " + str(len(distanceList)) + " and len of upstdspeedlist is " + str(len(upStdSpeedList)) + " and len of downstdspeedlist is " + str(len(downStdSpeedList)))
+            # for dist in distanceList:
+            #     #print(f"Distance: {reactionTimes[values.index(myDict)]} and dist: {dist}")
+            #     if abs(dist - reactionTimes[values.index(myDict)]) <= 1.5:
+            #         crossPoints.append([dist, speedList[distanceList.index(dist)], color])
+            #         #print("Appended " + str(dist) + " to crosspoints at speed of " + str(speedList[distanceList.index(dist)]) + " for conditon " + label)
+            #         break
+
+            # print("Len of speedlist is " + str(len(speedList)) + " and len of distancelist is " + str(len(distanceList)) + " and len of upstdspeedlist is " + str(len(upStdSpeedList)) + " and len of downstdspeedlist is " + str(len(downStdSpeedList)))
             for i in range(len(speedList) - 1, 1, -1):
                 angle = (speedList[i] - speedList[i - 1]) / (distanceList[i] - distanceList[i - 1])
                 angle = math.degrees(math.atan(angle))
 
                 if angle >= targetAngle and distanceList[i] < targetDistance:
-                    print(f"Angle of {angle} at {distanceList[i]} meters, speed {speedList[i]}, with a deviation of {speedList[i] - upStdSpeedList[i]} on {label} road")
-                    crossPoints.append((distanceList[i], speedList[i], color))
+
+                    # print the distance data:
+                    # print(f"{round(speedList[i], 0)} & {round(distanceList[i], 0)} & {round(upStdSpeedList[i], 1)} % {roadType}")
+                    ssd = 0.694 * speedList[i] * 0.8333 + math.pow(speedList[i] * 0.8333, 2) / (254 * 0.28)
+                    addDistance = reactionTimes[values.index(myDict)] * speedList[i] * 1000 / 3600
+
+                    if roadType == 4:
+                        addDistance *= -1
+
+                    totalDistance = distanceList[i] + addDistance
+
+                    for j in range(len(speedList) - 1, 1, -1):
+                        if abs(distanceList[j] - totalDistance) < 1.5:
+                            print(f"{int(ssd)} & {int(totalDistance)} & {round(totalDistance / ssd * 1000) / 10} % {roadType}")
+                            #print(f"{int(speedList[j])} & {int(totalDistance)} & {round(upStdSpeedList[j], 1) / 10} % {roadType}")
+                            crossPoints.append((totalDistance, speedList[j], color))
+                            break
                     break
 
     colors = ["darkgreen", "darkblue", "darkcyan", "darkgrey", "darkmagenta"]
@@ -296,7 +322,7 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
     axs[1].axvline(x=0, color="crimson", linestyle=":", label="Obstacle")
 
     # add a legend
-    #axs[0].legend(loc="upper right", bbox_to_anchor=(1.15, 1.0))
+    # axs[0].legend(loc="upper right", bbox_to_anchor=(1.15, 1.0))
     axs[0].legend()
     # invert x axis
     axs[0].invert_xaxis()
@@ -308,11 +334,11 @@ def PlotSpeedAtDistance(roadType=RoadType.Straight, method=CheckType.Under110):
 
 
 if __name__ == "__main__":
-    GetStopDistances(roadType=RoadType.All, kpi=KPI.TestNumber, method=CheckType.ReactionAccelToBrake)
+    # GetStopDistances(roadType=RoadType.All, kpi=KPI.TestNumber, method=CheckType.ReactionAccelToBrake)
 
-    #for roadType in RoadType:
-    #    PlotSpeedAtDistance(roadType=roadType)
-    #PlotSpeedAtDistance(roadType=RoadType.Straight)
+    for roadType in RoadType:
+        PlotSpeedAtDistance(roadType=roadType)
+    # PlotSpeedAtDistance(roadType=RoadType.Straight)
 
     # PlotMeansAndStds(roadType=RoadType.All, kpi=KPI.LightIntensity, method=CheckType.ReactionAccelToBrake, normalized=False)
     # get a single person's tests and compare to themself (avg. and std. var.)

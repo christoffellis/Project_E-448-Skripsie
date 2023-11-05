@@ -1,6 +1,7 @@
 import copy
 import json
 import matplotlib.pyplot as plt
+from main2 import ShowPath
 
 
 def CalculateStopDistanceWithLessThan110(testData):
@@ -143,33 +144,67 @@ def CalculateReactionTimeWithReactionAccelToBrake(testData):
     else:
         return 0.714, speed
 
+def CalculateReactionDistanceWithReactionAccelToBrake(testData):
+        # get the distance between the car and the obstacle at the point where the accelerator is released
+        # check for the first point where the accelerator is released before the car goes below 60
+        # if no such point is found, return None
+        stopTime = None
+        speed = None
+        distanceFirstAccelRelease = None
+        distanceFirstBrakeIncrease = None
+        speed1 = None
+        speed2 = None
+
+        reactTime = CalculateReactionTimeWithReactionAccelToBrake(testData)
+
+        val = CalculateStopDistanceWithReleaseOfAccelerator(testData, asTimeStamp=False)
+        if val is not None:
+            distanceFirstAccelRelease, speed1 = val
+        val = CalculateStopDistanceWithFirstFullBrake(testData, asTimeStamp=False)
+        if val is not None:
+            distanceFirstBrakeIncrease, speed2 = val
+
+        if reactTime[0] == 0.714:
+            if speed1 is None and speed2 is None or distanceFirstBrakeIncrease is None:
+                return [None,None]
+            print("Brake before add" + str(distanceFirstBrakeIncrease))
+            print("Brake after add" + str(distanceFirstBrakeIncrease + 0.714 * (speed1 if speed1 is not None else speed2) * 1000/3600))
+            return distanceFirstBrakeIncrease + 0.714 * (speed1 if speed1 is not None else speed2) * 1000/3600, speed1
+        else:
+            print(f"Accel react distance is {distanceFirstAccelRelease}")
+            return distanceFirstAccelRelease, speed2
+
+
 
 def AddSpeedPerDistance(dict, testData):
     originalDict = copy.deepcopy(dict)
     data = testData["data"]
 
     mapVal = int(testData["mapName"].split(" - ")[1].replace("[", "").replace("]", "")) % 5
-    print(mapVal)
 
-    distanceToObstacle = data[-10]["distanceToObstacle"]
+    distanceToObstacle = round(data[-10]["distanceToObstacle"], 0)
     hasDrivenFarOver = False
     hasAddedAtDistance = None
+    addedKeys = []
     for i in range(0, len(data)):
         distance = round(data[i]["distanceToVehicle"], 0)
         speed = round(data[i]["speed"], 0)
 
-        if mapVal != 4:
-            if distanceToObstacle - distance not in dict:
-                dict[distanceToObstacle - distance] = [speed]
-            elif hasAddedAtDistance != distance:
-                dict[distanceToObstacle - distance].append(speed)
-                hasAddedAtDistance = distance
-        else:
-            if distance - distanceToObstacle not in dict:
-                dict[distance - distanceToObstacle] = [speed]
-            elif hasAddedAtDistance != distance:
-                dict[distance - distanceToObstacle].append(speed)
-                hasAddedAtDistance = distance
+        distanceDiff = int(distanceToObstacle - distance)
+
+        if mapVal == 4:
+            distanceDiff = distanceDiff * -1
+
+
+        if distanceDiff not in dict:
+            dict[distanceDiff] = []
+        if hasAddedAtDistance != distanceDiff:
+            dict[distanceDiff].append(speed)
+            hasAddedAtDistance = distanceDiff
+
+        if distanceDiff not in addedKeys:
+            addedKeys.append(distanceDiff)
+
 
         if mapVal == 1:  # straight
             if distanceToObstacle - distance < -200 or distanceToObstacle - distance > 1250:
@@ -178,17 +213,32 @@ def AddSpeedPerDistance(dict, testData):
             if distanceToObstacle - distance < -200:
                 hasDrivenFarOver = True
 
-    minDistance = min(dict.keys())
-    for i in range(int(minDistance * 10), -1000, -1):
-        dist = i / 10
+    minDistance = min(addedKeys)
+
+
+    resolution = 1
+    #print("min distance was " + str(minDistance))
+    for i in range(int((minDistance) * resolution), int(-100 * resolution), -1):
+        dist = i / resolution
         if dist not in dict:
             dict[dist] = [0]
+            pass
+        else:
+            dict[dist].append(0)
+            pass
 
     if not hasDrivenFarOver:
         return dict
     else:
         return originalDict
 
+def InterpolateBetweenDataPoints(speed1, distance1, speed2, distance2, resolution):
+    returnDict = {}
+    for i in range(int(distance1 * resolution), int(distance2 * resolution), 1):
+        dist = i / resolution
+        speed = speed1 + (speed2 - speed1) * (dist - distance1) / (distance2 - distance1)
+        returnDict[dist] = speed
+    return returnDict
 
 def IdentifyOutliers(testData):
     data = testData["data"]
